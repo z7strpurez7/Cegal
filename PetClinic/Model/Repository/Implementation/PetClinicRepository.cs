@@ -1,4 +1,5 @@
-﻿using PetClinic.Model.Repository.Interfaces;
+﻿using Microsoft.EntityFrameworkCore;
+using PetClinic.Model.Repository.Interfaces;
 
 namespace PetClinic.Model.Repository.Implementation
 {
@@ -10,25 +11,38 @@ namespace PetClinic.Model.Repository.Implementation
         {
             _context = context;
         }
-
-        public void DeleteClient(Client client)
+        public async Task<bool> IsEmailRegisteredAsync(string email)
         {
-            _context.Client.Remove(client);
+            return await _context.Clients.AnyAsync(c => c.Email == email);
+        }
+
+        public async void InsertClient(Client client)
+        {
+            _context.Clients.Add(client);
         }
 
         public void UpdateClient(Client client)
         {
-            _context.Client.Update(client);
+            _context.Clients.Update(client);
         }
-
-        public void InsertClient(Client client)
+        public void DeleteClient(Client client)
         {
-            _context.Client.Add(client);
+            _context.Clients.Remove(client);
         }
 
         public async Task<Client> GetClientByIdAsync(int id)
         {
-            return await _context.Client.FindAsync(id);
+            return await _context.Clients.FindAsync(id);
+        }
+
+        public async Task<Client> GetClientWithChildrenAsync(int id)
+        {
+            var client = await _context.Clients
+           .Include(c => c.Pets)
+           .ThenInclude(p => p.Appointments)
+           .FirstOrDefaultAsync(c => c.Id == id);
+
+            return client;
         }
 
         public async Task<int> SaveAsync()

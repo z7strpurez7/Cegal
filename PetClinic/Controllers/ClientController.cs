@@ -32,8 +32,13 @@ namespace PetClinic.Controllers
         [ProducesResponseType(typeof(List<string>), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<int>> RegisterClient(PostClientDto clientDto)
         {
-            //validation
             var errors = _clientValidator.ValidatePostClient(clientDto);
+            bool emailExists = await _repository.IsEmailRegisteredAsync(clientDto.Email);
+            if (emailExists)
+            {
+                errors.Add("Email is already registered.");
+            }
+
             if (errors.Count > 0)
             {
                 return BadRequest(errors);
@@ -57,25 +62,38 @@ namespace PetClinic.Controllers
             {
                 return NotFound();
             }
+            bool emailExists = client.Email != putClientDto.Email && await _repository.IsEmailRegisteredAsync(putClientDto.Email);
             var errors = _clientValidator.ValidatePutClient(putClientDto);
+            if (emailExists)
+            {
+                errors.Add("Email is already registered.");
+            }
             if (errors.Count > 0)
             {
                 return BadRequest(errors);
             }
-            _repository.UpdateClient(_mapper.Map<Client>(putClientDto));
-            return Ok(await _repository.SaveAsync());
+            _mapper.Map(putClientDto, client);
+            // _repository.UpdateClient(_mapper.Map<Client>(putClientDto));
+            await _repository.SaveAsync();
+            return Ok(client.Id);
         }
 
         [HttpDelete("{id:int}")]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(typeof(int), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(int), StatusCodes.Status204NoContent)]
+        [ProducesResponseType(typeof(int), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<int>> DeleteClient(int id)
         {
-            var client = await _repository.GetClientByIdAsync(id);
+            var client = await _repository.GetClientWithChildrenAsync(id);
             //TODO:check if client has pets with an active appointment
             if (client == null)
             {
                 return NotFound();
+            }
+            bool hasActiveAppointments = client.Pets.Any(pet => pet.Appointments.Any(appointment => appointment.StartTime > DateTime.Now));
+            if (hasActiveAppointments)
+            {
+                return BadRequest("Cannot delete client as one or more pets have active appointments.");
             }
             _repository.DeleteClient(client);
             await _repository.SaveAsync();
@@ -91,11 +109,11 @@ namespace PetClinic.Controllers
         }
 
         [HttpGet("{id:int}")]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(int), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(GetClientDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<int>> GetClientById(int id)
         {
-            Client client = await _repository.GetClientByIdAsync(id);
+            Client client = await _repository.GetClientWithChildrenAsync(id);
             if (client == null)
             {
                 return NotFound();
